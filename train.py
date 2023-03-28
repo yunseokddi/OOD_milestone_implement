@@ -4,9 +4,12 @@ import torch
 import numpy as np
 import torchvision.transforms as transforms
 import model.densenet as dn
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
 
 from tensorboard_logger import configure, log_value
 from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHNDataLoader
+from trainer.trainer import Trainer
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
 parser.add_argument('--gpu', default='0', type=str, help='which gpu to use')
@@ -137,6 +140,32 @@ def main():
 
     print('Number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
+
+    model = model.cuda()
+
+    cudnn.benchmark = True
+
+    criterion = nn.CrossEntropyLoss().cuda()
+
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                momentum=args.momentum,
+                                nesterov=True,
+                                weight_decay=args.weight_decay)
+
+    trainer = Trainer(train_loader, model, criterion, optimizer, args.epochs)
+
+
+
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            model.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
 
 if __name__ == "__main__":
