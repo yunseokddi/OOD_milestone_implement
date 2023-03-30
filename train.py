@@ -12,7 +12,7 @@ from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHND
 from trainer.trainer import Trainer
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
-parser.add_argument('--gpu', default='0', type=str, help='which gpu to use')
+parser.add_argument('--gpu', default='1, 2, 3', type=str, help='which gpu to use')
 
 parser.add_argument('--in-dataset', default="CIFAR-10", type=str, help='in-distribution dataset')
 parser.add_argument('--model-arch', default='densenet', type=str, help='model architecture')
@@ -23,7 +23,7 @@ parser.add_argument('--save-epoch', default=10, type=int,
                     help='save the model every save_epoch')
 parser.add_argument('--start-epoch', default=0, type=int,
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=64, type=int,
+parser.add_argument('-b', '--batch-size', default=512, type=int,
                     help='mini-batch size (default: 64)')
 parser.add_argument('--ood-batch-size', default=128, type=int,
                     help='mini-batch size (default: 128)')
@@ -72,10 +72,13 @@ fw = open(save_state_file, 'w')
 print(state, file=fw)
 fw.close()
 
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
-
 torch.manual_seed(1)
 np.random.seed(1)
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Arrange GPU devices starting from 0
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main():
@@ -133,7 +136,7 @@ def main():
 
     if args.model_arch == "densenet":
         model = dn.DenseNet3(args.layers, num_classes, args.growth, reduction=args.reduce,
-                             bottleneck=args.bottleneck, dropRate=args.droprate, normalizer=normalizer)
+                             bottleneck=args.bottleneck, dropRate=args.droprate, normalizer=normalizer).cuda()
 
     else:
         assert False, 'Not supported model arch: {}'.format(args.model_arch)
@@ -141,7 +144,8 @@ def main():
     print('Number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
 
-    model = model.cuda()
+    # model = model.cuda()
+    model = torch.nn.DataParallel(model).to(device)
 
     cudnn.benchmark = True
 
@@ -152,9 +156,9 @@ def main():
                                 nesterov=True,
                                 weight_decay=args.weight_decay)
 
-    trainer = Trainer(train_loader, model, criterion, optimizer, args.epochs)
+    trainer = Trainer(train_loader, val_loader, model, criterion, optimizer, args)
 
-
+    trainer.train()
 
     if args.resume:
         if os.path.isfile(args.resume):
