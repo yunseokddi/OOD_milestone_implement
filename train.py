@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import torchvision.transforms as transforms
 import model.densenet as dn
+import model.wideresnet as wn
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 
@@ -137,6 +138,11 @@ def main():
     if args.model_arch == "densenet":
         model = dn.DenseNet3(args.layers, num_classes, args.growth, reduction=args.reduce,
                              bottleneck=args.bottleneck, dropRate=args.droprate, normalizer=normalizer).cuda()
+
+
+    elif args.model_arch == "wideresnet":
+        model = wn.WideResNet(args.depth, num_classes, widen_factor=args.width, dropRate=args.droprate, normalizer=normalizer).cuda()
+
 
     else:
         assert False, 'Not supported model arch: {}'.format(args.model_arch)
