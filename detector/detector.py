@@ -5,6 +5,7 @@ import torch
 import torchvision.datasets as datasets
 import model.densenet as dn
 import model.wideresnet as wn
+import time
 
 from data_loader.svhn_loader import SVHN
 
@@ -100,6 +101,29 @@ class Detector(object):
         else:
             assert False, 'Not supported model arch: {}'.format(self.args.model_arch)
 
+        checkpoint = torch.load(
+            "./checkpoints/{in_dataset}/{name}/checkpoint_{epochs}.pth.tar".format(in_dataset=self.in_dataset, name=self.name,
+                                                                                   epochs=self.epochs))
+
+        # if args.model_arch == 'densenet_ccu' or args.model_arch == 'wideresnet_ccu':
+        #     sewhole_model.load_state_dict(checkpoint['state_dict'])
+        # else:
+        #     model.load_state_dict(checkpoint['state_dict'])
+
+        # self.model.load_state_dict(checkpoint['state_dict'])
+
+
         self.model = torch.nn.DataParallel(self.model).to(device)
         self.model.eval()
+
+        if not self.mode_args['out_dist_only']:
+            t0 = time.time()
+
+            f1 = open(os.path.join(self.in_save_dir, "in_scores.txt"), 'w')
+            g1 = open(os.path.join(self.in_save_dir, "in_labels.txt"), 'w')
+
+            print("Processing in-distribution images")
+
+
+
 
