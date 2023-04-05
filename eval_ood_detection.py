@@ -3,6 +3,7 @@ import torch
 import numpy as np
 
 from detector.detector import Detector
+from model.metric import compute_traditional_odd
 
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
@@ -14,7 +15,7 @@ parser.add_argument('--in-dataset', default="CIFAR-10", type=str, help='in-distr
 parser.add_argument('--name', required=True, type=str, help='the name of the model trained')
 parser.add_argument('--model-arch', default='densenet', type=str, help='model architecture')
 
-parser.add_argument('--gpu', default = '1, 2, 3', type = str, help='gpu index')
+parser.add_argument('--gpu', default='1, 2, 3', type=str, help='gpu index')
 parser.add_argument('--adv', help='L_inf OOD', action='store_true')
 parser.add_argument('--corrupt', help='corrupted OOD', action='store_true')
 parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
@@ -64,9 +65,10 @@ if __name__ == "__main__":
     mode_args['in_dist_only'] = args.in_dist_only
     mode_args['out_dist_only'] = args.out_dist_only
 
-    # out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
-    out_datasets = "SVHN"
+    out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
 
     if args.method == "msp":
-        detector = Detector(args, out_datasets,method_args, adv_args, mode_args)
+        detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
         detector.detect()
+
+    compute_traditional_odd(args.base_dir, args.in_dataset, out_datasets, args.method, args.name)

@@ -35,11 +35,11 @@ class OutDataLoader(object):
             self.testloaderOut = torch.utils.data.DataLoader(testsetout, batch_size=self.batch_size, shuffle=True,
                                                         num_workers=2)
         else:
-            self.out_dataset = torchvision.datasets.ImageFolder("./datasets/ood_datasets/{}".format(self.out_dataset),
+            testsetout = torchvision.datasets.ImageFolder("./datasets/ood_datasets/{}".format(self.out_dataset),
                                                                 transform=transforms.Compose(
                                                                     [transforms.Resize(32), transforms.CenterCrop(32),
                                                                      transforms.ToTensor()]))
-            self.testloaderOut = torch.utils.data.DataLoader(self.testsetout, batch_size=self.batch_size,
+            self.testloaderOut = torch.utils.data.DataLoader(testsetout, batch_size=self.batch_size,
                                                         shuffle=True, num_workers=2)
 
         return self.testloaderOut

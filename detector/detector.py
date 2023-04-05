@@ -18,11 +18,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Detector(object):
-    def __init__(self, args, out_dataset, method_args, adv_args, mode_args):
+    def __init__(self, args, out_datasets, method_args, adv_args, mode_args):
         self.args = args
         self.base_dir = args.base_dir
         self.in_dataset = args.in_dataset
-        self.out_dataset = out_dataset
+        self.out_datasets = out_datasets
         self.batch_size = args.batch_size
         self.method = args.method
         self.method_args = method_args
@@ -55,10 +55,6 @@ class Detector(object):
         in_dataloader = InDataLoader(self.in_dataset, self.batch_size)
 
         self.test_loader_In, self.num_classes, self.num_reject_classes, self.normalizer = in_dataloader.get_dataloader()
-
-        # OOD Data Loader
-        out_dataloader = OutDataLoader(self.out_dataset, self.batch_size)
-        self.test_loader_Out = out_dataloader.get_dataloader()
 
         if self.method != "sofl":
             self.num_reject_classes = 0
@@ -150,39 +146,44 @@ class Detector(object):
             t0 = time.time()
 
     def detect_out_distribution(self):
-        out_save_dir = os.path.join(self.in_save_dir, self.out_dataset)
+        # OOD Data Loader
+        for out_dataset in self.out_datasets:
+            out_dataloader = OutDataLoader(out_dataset, self.batch_size)
+            test_loader_Out = out_dataloader.get_dataloader()
 
-        if not os.path.exists(out_save_dir):
-            os.makedirs(out_save_dir)
+            out_save_dir = os.path.join(self.in_save_dir, out_dataset)
 
-        f2 = open(os.path.join(out_save_dir, "out_scores.txt"), 'w')
+            if not os.path.exists(out_save_dir):
+                os.makedirs(out_save_dir)
 
-        tq_out_distribution = tqdm(self.test_loader_Out)
+            f2 = open(os.path.join(out_save_dir, "out_scores.txt"), 'w')
 
-        t0 = time.time()
+            tq_out_distribution = tqdm(test_loader_Out)
 
-        count = 0
-
-        for images, labels in tq_out_distribution:
-            images = images.cuda()
-            labels = labels.cuda()
-
-            curr_batch_size = images.shape[0]
-
-            scores = self.get_score(images)
-
-            for score in scores:
-                f2.write("{}\n".format(score))
-
-            count += curr_batch_size
-
-            errors = {
-                'Count': count,
-                'Time': time.time() - t0
-            }
-
-            tq_out_distribution.set_postfix(errors)
             t0 = time.time()
+
+            count = 0
+
+            for images, labels in tq_out_distribution:
+                images = images.cuda()
+                labels = labels.cuda()
+
+                curr_batch_size = images.shape[0]
+
+                scores = self.get_score(images)
+
+                for score in scores:
+                    f2.write("{}\n".format(score))
+
+                count += curr_batch_size
+
+                errors = {'Dataset' :out_dataset,
+                    'Count': count,
+                    'Time': time.time() - t0
+                }
+
+                tq_out_distribution.set_postfix(errors)
+                t0 = time.time()
 
     def get_score(self, inputs, raw_score=False):
         if self.method == "msp":
