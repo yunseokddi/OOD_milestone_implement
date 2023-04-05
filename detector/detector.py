@@ -1,13 +1,15 @@
 import os
-import torchvision.transforms as transforms
-import torchvision
 import torch
-import torchvision.datasets as datasets
 import model.densenet as dn
 import model.wideresnet as wn
 import time
+import torch.nn.functional as F
+import numpy as np
 
-from data_loader.svhn_loader import SVHN
+from tqdm import tqdm
+from model.metric import get_msp_score
+from data_loader.in_data_loader import InDataLoader
+from data_loader.out_data_loader import OutDataLoader
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Arrange GPU devices starting from 0
 os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
@@ -21,7 +23,7 @@ class Detector(object):
         self.base_dir = args.base_dir
         self.in_dataset = args.in_dataset
         self.out_dataset = out_dataset
-        self.bath_size = args.batch_size
+        self.batch_size = args.batch_size
         self.method = args.method
         self.method_args = method_args
         self.name = args.name
@@ -49,39 +51,14 @@ class Detector(object):
         if not os.path.exists(self.in_save_dir):
             os.makedirs(self.in_save_dir)
 
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-        ])
+        # In distribution Data Loader
+        in_dataloader = InDataLoader(self.in_dataset, self.batch_size)
 
-        if self.in_dataset == "CIFAR-10":
-            self.normalizer = transforms.Normalize((125.3 / 255, 123.0 / 255, 113.9 / 255),
-                                                   (63.0 / 255, 62.1 / 255.0, 66.7 / 255.0))
-            self.testset = torchvision.datasets.CIFAR10(root='./datasets/cifar10', train=False, download=True,
-                                                        transform=self.transform)
-            self.testloaderIn = torch.utils.data.DataLoader(self.testset, batch_size=self.bath_size, shuffle=True,
-                                                            num_workers=2)
+        self.test_loader_In, self.num_classes, self.num_reject_classes, self.normalizer = in_dataloader.get_dataloader()
 
-            self.num_classes = 10
-            self.num_reject_classes = 5
-
-        elif self.in_dataset == "CIFAR-100":
-            self.normalizer = transforms.Normalize((125.3 / 255, 123.0 / 255, 113.9 / 255),
-                                                   (63.0 / 255, 62.1 / 255.0, 66.7 / 255.0))
-            self.testset = torchvision.datasets.CIFAR100(root='./datasets/cifar100', train=False, download=True,
-                                                         transform=self.transform)
-            self.testloaderIn = torch.utils.data.DataLoader(self.testset, batch_size=self.bath_size, shuffle=True,
-                                                            num_workers=2)
-
-            self.num_classes = 100
-            self.num_reject_classes = 10
-
-        elif self.in_dataset == "SVHN":
-            self.normalizer = None
-            self.testset = SVHN('/datasets/svhn', split='test', transform=transforms.ToTensor(), download=False)
-            self.testloaderIn = torch.utils.data.DataLoader(self.testset, batch_size=self.bath_size, shuffle=True,
-                                                            num_workers=2)
-            self.num_classes = 10
-            self.num_reject_classes = 5
+        # OOD Data Loader
+        out_dataloader = OutDataLoader(self.out_dataset, self.batch_size)
+        self.test_loader_Out = out_dataloader.get_dataloader()
 
         if self.method != "sofl":
             self.num_reject_classes = 0
@@ -91,39 +68,124 @@ class Detector(object):
 
         self.method_args['num_classes'] = self.num_classes
 
+        # Model definition
         if self.args.model_arch == "densenet":
-            self.model = dn.DenseNet3(self.args.layers, self.num_classes + self.num_reject_classes, normalizer=self.normalizer)
+            self.model = dn.DenseNet3(self.args.layers, self.num_classes + self.num_reject_classes,
+                                      normalizer=self.normalizer)
 
         elif self.args.model_arch == "wideresnet":
-            self.model = wn.WideResNet(self.args.depth, self.num_classes + self.num_reject_classes, widen_factor=self.args.width, normalizer=self.normalizer)
+            self.model = wn.WideResNet(self.args.depth, self.num_classes + self.num_reject_classes,
+                                       widen_factor=self.args.width, normalizer=self.normalizer)
 
 
         else:
             assert False, 'Not supported model arch: {}'.format(self.args.model_arch)
 
         checkpoint = torch.load(
-            "./checkpoints/{in_dataset}/{name}/checkpoint_{epochs}.pth.tar".format(in_dataset=self.in_dataset, name=self.name,
-                                                                                   epochs=self.epochs))
+            "./checkpoints/{model}/{in_dataset}/{name}/checkpoint_{epochs}.pth.tar".format(
+                in_dataset=self.in_dataset, model=self.args.model_arch,
+                name='vanilla',
+                epochs=self.epochs))
 
         # if args.model_arch == 'densenet_ccu' or args.model_arch == 'wideresnet_ccu':
         #     sewhole_model.load_state_dict(checkpoint['state_dict'])
         # else:
         #     model.load_state_dict(checkpoint['state_dict'])
 
-        # self.model.load_state_dict(checkpoint['state_dict'])
-
+        self.model.load_state_dict(checkpoint['state_dict'])
 
         self.model = torch.nn.DataParallel(self.model).to(device)
         self.model.eval()
 
+    def detect(self):
         if not self.mode_args['out_dist_only']:
+            print("Processing in-distribution images")
+            self.detect_in_distribution()
+
+            if self.mode_args['in_dist_only']:
+                return
+
+        print("Processing out-of-distribution images")
+        self.detect_out_distribution()
+
+    def detect_in_distribution(self):
+        tq_in_distribution = tqdm(self.test_loader_In)
+
+        t0 = time.time()
+
+        f1 = open(os.path.join(self.in_save_dir, "in_scores.txt"), 'w')
+        g1 = open(os.path.join(self.in_save_dir, "in_labels.txt"), 'w')
+
+        count = 0
+
+        for images, labels in tq_in_distribution:
+            images = images.cuda()
+            labels = labels.cuda()
+
+            curr_batch_size = images.shape[0]
+
+            inputs = images
+
+            scores = self.get_score(inputs)
+
+            for score in scores:
+                f1.write("{}\n".format(score))
+
+            outputs = F.softmax(self.model(inputs)[:, :self.num_classes], dim=1)
+            outputs = outputs.detach().cpu().numpy()
+            preds = np.argmax(outputs, axis=1)
+            confs = np.max(outputs, axis=1)
+
+            for k in range(preds.shape[0]):
+                g1.write("{} {} {}\n".format(labels[k], preds[k], confs[k]))
+
+            count += curr_batch_size
+
+            errors = {
+                'Count': count,
+                'Time': time.time() - t0
+            }
+
+            tq_in_distribution.set_postfix(errors)
             t0 = time.time()
 
-            f1 = open(os.path.join(self.in_save_dir, "in_scores.txt"), 'w')
-            g1 = open(os.path.join(self.in_save_dir, "in_labels.txt"), 'w')
+    def detect_out_distribution(self):
+        out_save_dir = os.path.join(self.in_save_dir, self.out_dataset)
 
-            print("Processing in-distribution images")
+        if not os.path.exists(out_save_dir):
+            os.makedirs(out_save_dir)
 
+        f2 = open(os.path.join(out_save_dir, "out_scores.txt"), 'w')
 
+        tq_out_distribution = tqdm(self.test_loader_Out)
 
+        t0 = time.time()
 
+        count = 0
+
+        for images, labels in tq_out_distribution:
+            images = images.cuda()
+            labels = labels.cuda()
+
+            curr_batch_size = images.shape[0]
+
+            scores = self.get_score(images)
+
+            for score in scores:
+                f2.write("{}\n".format(score))
+
+            count += curr_batch_size
+
+            errors = {
+                'Count': count,
+                'Time': time.time() - t0
+            }
+
+            tq_out_distribution.set_postfix(errors)
+            t0 = time.time()
+
+    def get_score(self, inputs, raw_score=False):
+        if self.method == "msp":
+            scores = get_msp_score(inputs, self.model)
+
+        return scores

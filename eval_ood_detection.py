@@ -14,7 +14,7 @@ parser.add_argument('--in-dataset', default="CIFAR-10", type=str, help='in-distr
 parser.add_argument('--name', required=True, type=str, help='the name of the model trained')
 parser.add_argument('--model-arch', default='densenet', type=str, help='model architecture')
 
-parser.add_argument('--gpu', default = '0', type = str, help='gpu index')
+parser.add_argument('--gpu', default = '1, 2, 3', type = str, help='gpu index')
 parser.add_argument('--adv', help='L_inf OOD', action='store_true')
 parser.add_argument('--corrupt', help='corrupted OOD', action='store_true')
 parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
@@ -35,7 +35,7 @@ parser.add_argument('--severity-level', default=5, type=int, help='severity leve
 parser.add_argument('--epochs', default=100, type=int,
                     help='number of total epochs to run')
 
-parser.add_argument('-b', '--batch-size', default=50, type=int,
+parser.add_argument('-b', '--batch-size', default=256, type=int,
                     help='mini-batch size')
 
 parser.add_argument('--base-dir', default='output/ood_scores', type=str, help='result directory')
@@ -64,7 +64,9 @@ if __name__ == "__main__":
     mode_args['in_dist_only'] = args.in_dist_only
     mode_args['out_dist_only'] = args.out_dist_only
 
-    out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'places365', 'SVHN']
+    # out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
+    out_datasets = "SVHN"
 
     if args.method == "msp":
-        Detector(args, out_datasets,method_args, adv_args, mode_args)
+        detector = Detector(args, out_datasets,method_args, adv_args, mode_args)
+        detector.detect()
