@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from tqdm import tqdm
-from model.metric import get_msp_score
+from model.metric import get_msp_score, get_odin_score
 from data_loader.in_data_loader import InDataLoader
 from data_loader.out_data_loader import OutDataLoader
 
@@ -188,5 +188,11 @@ class Detector(object):
     def get_score(self, inputs, raw_score=False):
         if self.method == "msp":
             scores = get_msp_score(inputs, self.model)
+
+        elif self.method == "odin":
+            scores = get_odin_score(inputs, self.model, self.method_args, self.in_dataset,  self.args.model_arch)
+
+        else:
+            assert False, 'Not supported method'
 
         return scores

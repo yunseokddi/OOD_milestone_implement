@@ -71,4 +71,14 @@ if __name__ == "__main__":
         detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
         detector.detect()
 
+    elif args.method == "odin":
+        method_args['temperature'] = 1000.0
+
+        detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
+        detector.detect()
+
+
+    else:
+        assert False, 'Not supported method'
+
     compute_traditional_odd(args.base_dir, args.in_dataset, out_datasets, args.method, args.name)
