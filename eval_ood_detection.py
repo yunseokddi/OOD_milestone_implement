@@ -23,7 +23,7 @@ parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
 parser.add_argument('--in-dist-only', help='only evaluate in-distribution', action='store_true')
 parser.add_argument('--out-dist-only', help='only evaluate out-distribution', action='store_true')
 
-parser.add_argument('--method', default='msp', type=str, help='scoring function')
+parser.add_argument('--method', default='odin', type=str, help='scoring function')
 parser.add_argument('--cal-metric', help='calculate metric directly', action='store_true')
 
 parser.add_argument('--epsilon', default=8.0, type=float, help='epsilon')
