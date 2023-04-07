@@ -1,6 +1,5 @@
 # OOD_milestone_implement
 
----
 This is Pytorch implementation of the OOD experiments with [pytorch-template](https://github.com/victoresque/pytorch-template) in the following milestone papers:
 
 - [MSP] A Baseline for Detecting Missclassified and Out-of-Distribution Examples in Neural Networks | **[ICLR2017]** [[paper]](https://arxiv.org/pdf/1610.02136.pdf)
@@ -9,7 +8,6 @@ This is Pytorch implementation of the OOD experiments with [pytorch-template](ht
 
 ## Installation & requirement
 
----
 The current version of the code has been tested with `python 3.6.9` on an Ubuntu 18.04 OS with the following versions of Pytorch and Torchvision:
 
 - `pytorch 1.7.1`
@@ -21,7 +19,6 @@ Assuming Python and pip are set up, these packages can be installed using:
 pip install -r requirements.txt
 ```
 
----
 ## Folder Structure
 ```angular2html
 OOD_milestone_implement/
@@ -49,7 +46,6 @@ OOD_milestone_implement/
 
 ## Running custom experiments
 
----
 **The main options of this script are:**
 - `--in_dataset`: choose in distribution dataset (`CIFAR-10`|`CIFAR-100`|`SVHN`)
 - `--model_arch`: choose model architecture (`densenet`|`wideresnet`)
@@ -81,12 +77,10 @@ Model Name: test_odin
 
 ## License
 
----
 This project is licensed under the Apache-2.0 License. See [LICENSE](https://github.com/yunseokddi/OOD_milestone_implement/blob/main/license) for more details
 
 ## Reference
 
----
 - **Project structure**: [https://github.com/jfc43/informative-outlier-mining](https://github.com/jfc43/informative-outlier-mining)
 - **Odin**: [https://github.com/facebookresearch/odin](https://github.com/facebookresearch/odin)
 - **Mahalanobis**: [https://github.com/pokaxpoka/deep_Mahalanobis_detector](https://github.com/pokaxpoka/deep_Mahalanobis_detector)
