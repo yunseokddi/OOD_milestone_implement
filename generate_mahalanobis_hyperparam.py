@@ -9,6 +9,7 @@ import model.wideresnet as wn
 
 from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHNDataLoader
 from torch.autograd import Variable
+from utils.mahalanobis_lib import sample_estimator
 
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
@@ -136,6 +137,12 @@ class GenerateMahalanobisHyperParam(object):
         for out in temp_list:
             feature_list[count] = out.size(1)
             count += 1
+
+        print("Get sample mean and covariance")
+        sample_mean, precision = sample_estimator(self.model, self.num_classes, feature_list, self.train_loader_in)
+
+        print("Train logistic regression model")
+
 
 
 if __name__ == "__main__":
