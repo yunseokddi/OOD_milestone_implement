@@ -69,7 +69,7 @@ class GenerateMahalanobisHyperParam(object):
 
             data_obj = CIFAR10DataLoader(transform_train=transform, transform_test=transform, kwargs=self.kwargs
                                          , args=self.args)
-            self.train_loader_in, self.val_loader_in = data_obj.get_dataloader()
+            self.train_loader_in, self.test_loader_in = data_obj.get_dataloader()
 
             self.num_classes = 10
 
@@ -82,7 +82,7 @@ class GenerateMahalanobisHyperParam(object):
 
             data_obj = CIFAR100DataLoader(transform_train=transform, transform_test=transform, kwargs=self.kwargs
                                           , args=self.args)
-            self.train_loader_in, self.val_loader_in = data_obj.get_dataloader()
+            self.train_loader_in, self.test_loader_in = data_obj.get_dataloader()
 
             self.num_classes = 100
 
@@ -95,7 +95,7 @@ class GenerateMahalanobisHyperParam(object):
 
             data_obj = SVHNDataLoader(transform_train=transform, transform_test=transform, kwargs=self.kwargs
                                       , args=self.args)
-            self.train_loader_in, self.val_loader_in = data_obj.get_dataloader()
+            self.train_loader_in, self.test_loader_in = data_obj.get_dataloader()
 
             self.args.epochs = 20
             self.num_classes = 10
@@ -127,6 +127,11 @@ class GenerateMahalanobisHyperParam(object):
         self.model.to(device)
         self.model.eval()
 
+        self.sample_mean, self.precision = self.get_mean_cov()
+
+        self.train_logistic_regression()
+
+    def get_mean_cov(self):
         temp_x = torch.rand(2, 3, 32, 32)
         temp_x = Variable(temp_x).cuda()
         temp_list = self.model.feature_list(temp_x)[1]
@@ -141,9 +146,97 @@ class GenerateMahalanobisHyperParam(object):
         print("Get sample mean and covariance")
         sample_mean, precision = sample_estimator(self.model, self.num_classes, feature_list, self.train_loader_in)
 
+        return sample_mean, precision
+
+    def train_logistic_regression(self):
         print("Train logistic regression model")
+        m = 500
 
+        train_in = []
+        train_in_label = []
+        train_out = []
 
+        val_in = []
+        val_in_label = []
+        val_out = []
+
+        cnt = 0
+
+        for data, target in self.test_loader_in:
+            data = data.numpy()
+            target = target.numpy()
+            for x, y in zip(data, target):
+                cnt += 1
+                if cnt <= m:
+                    train_in.append(x)
+                    train_in_label.append(y)
+                elif cnt <= 2 * m:
+                    val_in.append(x)
+                    val_in_label.append(y)
+
+                if cnt == 2 * m:
+                    break
+            if cnt == 2 * m:
+                break
+
+        print('In', len(train_in), len(val_in))
+
+        criterion = nn.CrossEntropyLoss().cuda()
+        adv_noise = 0.05
+
+        for i in range(int(m / args.batch_size) + 1):
+            if i * args.batch_size >= m:
+                break
+
+            data = torch.tensor(train_in[i * args.batch_size:min((i + 1) * args.batch_size, m)])
+            target = torch.tensor(train_in_label[i * args.batch_size:min((i + 1) * args.batch_size, m)])
+            data = data.cuda()
+            target = target.cuda()
+
+            with torch.no_grad():
+                data, target = Variable(data), Variable(target)
+            output = self.model(data)
+
+            self.model.zero_grad()
+            inputs = Variable(data.data, requires_grad=True).cuda()
+            output = self.model(inputs)
+            loss = criterion(output, target)
+            loss.backward()
+
+            gradient = torch.ge(inputs.grad.data, 0)
+            gradient = (gradient.float() - 0.5) * 2
+
+            adv_data = torch.add(input=inputs.data, other=gradient, alpha=adv_noise)
+            adv_data = torch.clamp(adv_data, 0.0, 1.0)
+
+            train_out.extend(adv_data.cpu().numpy())
+
+        for i in range(int(m / args.batch_size) + 1):
+            if i * args.batch_size >= m:
+                break
+            data = torch.tensor(val_in[i * args.batch_size:min((i + 1) * args.batch_size, m)])
+            target = torch.tensor(val_in_label[i * args.batch_size:min((i + 1) * args.batch_size, m)])
+            data = data.cuda()
+            target = target.cuda()
+            with torch.no_grad():
+                data, target = Variable(data), Variable(target)
+            output = self.model(data)
+
+            self.model.zero_grad()
+            inputs = Variable(data.data, requires_grad=True).cuda()
+            output = self.model(inputs)
+            loss = criterion(output, target)
+            loss.backward()
+
+            gradient = torch.ge(inputs.grad.data, 0)
+            gradient = (gradient.float() - 0.5) * 2
+
+            adv_data = torch.add(input=inputs.data, other=gradient, alpha=adv_noise)
+            adv_data = torch.clamp(adv_data, 0.0, 1.0)
+
+            val_out.extend(adv_data.cpu().numpy())
+
+        print('Out', len(train_out), len(val_out))
 
 if __name__ == "__main__":
     save_path = os.path.join("./output/mahalanobis_hyperparams/", args.in_dataset, args.name)
