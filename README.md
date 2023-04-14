@@ -33,15 +33,20 @@ OOD_milestone_implement/
 │   └── detector.py
 ├── model/ - models, losses, and metrics
 │   ├── densenet.py
+│   ├── mahalanobis.py - metrics for mahalanobis method
 │   ├── metric.py - metrics of confidence score and evaluation
 │   └── wideresnet.py
 ├── runs/ - tensorboard log folder, it will be updated
 ├── trainer/ - trainers
 │   └── trainer.py/ - full training src
 ├── utils/ - small utility functions
+│   ├── mahalanobis_lib.py - function for mahalanobis
 │   └── select_svhn_data.py - function for select svhn data file
-├── eval_ood_detection.py - OOD evaluation of trained model
-└── train.py - main script to start training
+├── eval_ood_detection.py - **main script to OOD evaluation**
+├── generate_mahalanobis_hyperparam.py - Get mahalanobis's hyper parameters
+├── license
+├── requirements.txt
+└── train.py - **main script to start training**
 ```
 
 ## Running custom experiments
