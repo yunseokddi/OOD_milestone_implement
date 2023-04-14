@@ -7,9 +7,10 @@ import torch.nn.functional as F
 import numpy as np
 
 from tqdm import tqdm
-from model.metric import get_msp_score, get_odin_score
+from model.metric import get_msp_score, get_odin_score, get_Mahanobis_score
 from data_loader.in_data_loader import InDataLoader
 from data_loader.out_data_loader import OutDataLoader
+from torch.autograd import Variable
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Arrange GPU devices starting from 0
 os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
@@ -90,8 +91,21 @@ class Detector(object):
 
         self.model.load_state_dict(checkpoint['state_dict'])
 
-        self.model = torch.nn.DataParallel(self.model).to(device)
-        self.model.eval()
+        if self.method != "mahalanobis":
+            self.model = torch.nn.DataParallel(self.model).to(device)
+            self.model.eval()
+
+        else:
+            self.model.cuda()
+            self.model.eval()
+
+        if self.method == "mahalanobis":
+            temp_x = torch.rand(2,3,32,32)
+            temp_x = Variable(temp_x).cuda()
+            temp_list = self.model.feature_list(temp_x)[1]
+            num_output = len(temp_list)
+            self.method_args['num_output'] = num_output
+
 
     def detect(self):
         if not self.mode_args['out_dist_only']:
@@ -191,6 +205,10 @@ class Detector(object):
 
         elif self.method == "odin":
             scores = get_odin_score(inputs, self.model, self.method_args, self.in_dataset,  self.args.model_arch)
+
+        elif self.method == "mahalanobis":
+            scores = get_Mahanobis_score(inputs, self.model, self.method_args)
+
 
         else:
             assert False, 'Not supported method'

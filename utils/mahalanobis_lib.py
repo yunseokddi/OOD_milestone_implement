@@ -89,3 +89,59 @@ def sample_estimator(model, num_classes, feature_list, train_loader):
     print('\n Training Accuracy:({:.2f}%)\n'.format(100. * correct / total))
 
     return sample_class_mean, precision
+
+
+def get_mahalanobis_score(inputs, model, num_classes, sample_mean, precision, num_output, magnitude):
+    for layer_index in range(num_output):
+        data = Variable(inputs, requires_grad = True)
+        data = data.cuda()
+
+        out_features = model.intermediate_forward(data, layer_index)
+        out_features = out_features.view(out_features.size(0), out_features.size(1), -1)
+        out_features = torch.mean(out_features, 2)
+
+        gaussian_score = 0
+        for i in range(num_classes):
+            batch_sample_mean = sample_mean[layer_index][i]
+            zero_f = out_features.data - batch_sample_mean
+            term_gau = -0.5*torch.mm(torch.mm(zero_f, precision[layer_index]), zero_f.t()).diag()
+            if i == 0:
+                gaussian_score = term_gau.view(-1,1)
+            else:
+                gaussian_score = torch.cat((gaussian_score, term_gau.view(-1,1)), 1)
+
+        # Input_processing
+        sample_pred = gaussian_score.max(1)[1]
+        batch_sample_mean = sample_mean[layer_index].index_select(0, sample_pred)
+        zero_f = out_features - Variable(batch_sample_mean)
+        pure_gau = -0.5*torch.mm(torch.mm(zero_f, Variable(precision[layer_index])), zero_f.t()).diag()
+        loss = torch.mean(-pure_gau)
+        loss.backward()
+
+        gradient =  torch.ge(data.grad.data, 0)
+        gradient = (gradient.float() - 0.5) * 2
+
+        tempInputs = torch.add(data.data, -magnitude, gradient)
+
+        noise_out_features = model.intermediate_forward(Variable(tempInputs), layer_index)
+        noise_out_features = noise_out_features.view(noise_out_features.size(0), noise_out_features.size(1), -1)
+        noise_out_features = torch.mean(noise_out_features, 2)
+        noise_gaussian_score = 0
+        for i in range(num_classes):
+            batch_sample_mean = sample_mean[layer_index][i]
+            zero_f = noise_out_features.data - batch_sample_mean
+            term_gau = -0.5*torch.mm(torch.mm(zero_f, precision[layer_index]), zero_f.t()).diag()
+            if i == 0:
+                noise_gaussian_score = term_gau.view(-1,1)
+            else:
+                noise_gaussian_score = torch.cat((noise_gaussian_score, term_gau.view(-1,1)), 1)
+
+        noise_gaussian_score, _ = torch.max(noise_gaussian_score, dim=1)
+
+        noise_gaussian_score = np.asarray(noise_gaussian_score.cpu().numpy(), dtype=np.float32)
+        if layer_index == 0:
+            Mahalanobis_scores = noise_gaussian_score.reshape((noise_gaussian_score.shape[0], -1))
+        else:
+            Mahalanobis_scores = np.concatenate((Mahalanobis_scores, noise_gaussian_score.reshape((noise_gaussian_score.shape[0], -1))), axis=1)
+
+    return Mahalanobis_scores

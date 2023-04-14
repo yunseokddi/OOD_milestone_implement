@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 from torch.autograd import Variable
+from utils.mahalanobis_lib import get_mahalanobis_score
 
 
 # OOD scoring method
@@ -65,6 +66,21 @@ def get_odin_score(inputs, model, method_args, in_dataset, model_arch):
     scores = np.max(nn_outputs, axis=1)
 
     return scores
+
+def get_Mahanobis_score(inputs , model, method_args):
+    num_classes = method_args['num_classes']
+    sample_mean = method_args['sample_mean']
+    precision = method_args['precision']
+    magnitude = method_args['magnitude']
+    regressor = method_args['regressor']
+    num_output = method_args['num_output']
+
+    Mahalanobis_scores = get_mahalanobis_score(inputs, model, num_classes, sample_mean, precision, num_output,
+                                               magnitude)
+    scores = -regressor.predict_proba(Mahalanobis_scores)[:, 1]
+
+    return scores
+
 
 
 # metric for OOD

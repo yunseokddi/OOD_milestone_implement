@@ -1,9 +1,14 @@
 import argparse
 import torch
 import numpy as np
+import os
+import warnings
 
 from detector.detector import Detector
 from model.metric import compute_traditional_odd
+from sklearn.linear_model import LogisticRegressionCV
+
+warnings.filterwarnings('ignore')
 
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
@@ -15,7 +20,7 @@ parser.add_argument('--in-dataset', default="CIFAR-10", type=str, help='in-distr
 parser.add_argument('--name', required=True, type=str, help='the name of the model trained')
 parser.add_argument('--model-arch', default='densenet', type=str, help='model architecture')
 
-parser.add_argument('--gpu', default='1, 2, 3', type=str, help='gpu index')
+parser.add_argument('--gpu', default='1', type=str, help='gpu index')
 parser.add_argument('--adv', help='L_inf OOD', action='store_true')
 parser.add_argument('--corrupt', help='corrupted OOD', action='store_true')
 parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
@@ -23,7 +28,7 @@ parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
 parser.add_argument('--in-dist-only', help='only evaluate in-distribution', action='store_true')
 parser.add_argument('--out-dist-only', help='only evaluate out-distribution', action='store_true')
 
-parser.add_argument('--method', default='odin', type=str, help='scoring function')
+parser.add_argument('--method', default='mahalanobis', type=str, help='scoring function')
 parser.add_argument('--cal-metric', help='calculate metric directly', action='store_true')
 
 parser.add_argument('--epsilon', default=8.0, type=float, help='epsilon')
@@ -77,6 +82,21 @@ if __name__ == "__main__":
         detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
         detector.detect()
 
+    elif args.method == "mahalanobis":
+        sample_mean, precision, lr_weights, lr_bias, magnitude = np.load(
+            os.path.join('output/mahalanobis_hyperparams/', args.in_dataset, args.name, 'results.npy'), allow_pickle=True)
+        regressor = LogisticRegressionCV(cv=2).fit([[0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1], [1, 1, 1, 1]],
+                                                   [0, 0, 1, 1])
+        regressor.coef_ = lr_weights
+        regressor.intercept_ = lr_bias
+
+        method_args['sample_mean'] = sample_mean
+        method_args['precision'] = precision
+        method_args['magnitude'] = magnitude
+        method_args['regressor'] = regressor
+
+        detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
+        detector.detect()
 
     else:
         assert False, 'Not supported method'

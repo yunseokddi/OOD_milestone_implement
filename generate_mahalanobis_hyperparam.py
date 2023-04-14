@@ -6,10 +6,16 @@ import numpy as np
 import argparse
 import model.densenet as dn
 import model.wideresnet as wn
+import warnings
+import time
 
 from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHNDataLoader
 from torch.autograd import Variable
-from utils.mahalanobis_lib import sample_estimator
+from utils.mahalanobis_lib import sample_estimator, get_mahalanobis_score
+from sklearn.linear_model import LogisticRegressionCV
+from model.mahalanobis_metric import metric, print_results
+
+warnings.filterwarnings('ignore')
 
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
@@ -29,7 +35,7 @@ parser.add_argument('--gpu', default='1,2', type=str,
 parser.add_argument('--epochs', default=100, type=int,
                     help='number of total epochs to run')
 
-parser.add_argument('-b', '--batch-size', default=64, type=int,
+parser.add_argument('-b', '--batch-size', default=10, type=int,
                     help='mini-batch size')
 
 parser.add_argument('--layers', default=100, type=int,
@@ -50,7 +56,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 class GenerateMahalanobisHyperParam(object):
     def __init__(self, args, save_dir):
-        self.stype = ['mahalanobis']
+        self.stypes = ['mahalanobis']
         self.save_dir = save_dir
 
         if not os.path.exists(self.save_dir):
@@ -129,14 +135,12 @@ class GenerateMahalanobisHyperParam(object):
 
         self.sample_mean, self.precision = self.get_mean_cov()
 
-        self.train_logistic_regression()
-
     def get_mean_cov(self):
         temp_x = torch.rand(2, 3, 32, 32)
         temp_x = Variable(temp_x).cuda()
         temp_list = self.model.feature_list(temp_x)[1]
-        num_output = len(temp_list)
-        feature_list = np.empty(num_output)
+        self.num_output = len(temp_list)
+        feature_list = np.empty(self.num_output)
         count = 0
 
         for out in temp_list:
@@ -238,6 +242,114 @@ class GenerateMahalanobisHyperParam(object):
 
         print('Out', len(train_out), len(val_out))
 
+        train_lr_data = []
+        train_lr_label = []
+        train_lr_data.extend(train_in)
+        train_lr_label.extend(np.zeros(m))
+        train_lr_data.extend(train_out)
+        train_lr_label.extend(np.ones(m))
+        train_lr_data = torch.tensor(train_lr_data)
+        train_lr_label = torch.tensor(train_lr_label)
+
+        best_fpr = 1.1
+        best_magnitude = 0.0
+
+        for magnitude in [0.0, 0.01, 0.005, 0.002, 0.0014, 0.001, 0.0005]:
+            train_lr_Mahalanobis = []
+            total = 0
+            for data_index in range(int(np.floor(train_lr_data.size(0) / args.batch_size))):
+                data = train_lr_data[total: total + args.batch_size].cuda()
+                total += args.batch_size
+                Mahalanobis_scores = get_mahalanobis_score(data, self.model, self.num_classes, self.sample_mean,
+                                                           self.precision, self.num_output,
+                                                           magnitude)
+                train_lr_Mahalanobis.extend(Mahalanobis_scores)
+
+            train_lr_Mahalanobis = np.asarray(train_lr_Mahalanobis, dtype=np.float32)
+            regressor = LogisticRegressionCV(n_jobs=-1).fit(train_lr_Mahalanobis, train_lr_label)
+
+            print('Logistic Regressor params:', regressor.coef_, regressor.intercept_)
+
+            t0 = time.time()
+            f1 = open(os.path.join(self.save_dir, "confidence_mahalanobis_In.txt"), 'w')
+            f2 = open(os.path.join(self.save_dir, "confidence_mahalanobis_Out.txt"), 'w')
+
+            ########################################In-distribution###########################################
+            print("Processing in-distribution images")
+
+            count = 0
+            for i in range(int(m / args.batch_size) + 1):
+                if i * args.batch_size >= m:
+                    break
+                images = torch.tensor(val_in[i * args.batch_size: min((i + 1) * args.batch_size, m)]).cuda()
+                # if j<1000: continue
+                batch_size = images.shape[0]
+                Mahalanobis_scores = get_mahalanobis_score(images, self.model, self.num_classes, self.sample_mean,
+                                                           self.precision,
+                                                           self.num_output, magnitude)
+                confidence_scores = regressor.predict_proba(Mahalanobis_scores)[:, 1]
+
+                for k in range(batch_size):
+                    f1.write("{}\n".format(-confidence_scores[k]))
+
+                count += batch_size
+                print("{:4}/{:4} images processed, {:.1f} seconds used.".format(count, m, time.time() - t0))
+                t0 = time.time()
+
+                ###################################Out-of-Distributions#####################################
+            t0 = time.time()
+            print("Processing out-of-distribution images")
+            count = 0
+
+            for i in range(int(m / args.batch_size) + 1):
+                if i * args.batch_size >= m:
+                    break
+                images = torch.tensor(val_out[i * args.batch_size: min((i + 1) * args.batch_size, m)]).cuda()
+                # if j<1000: continue
+                batch_size = images.shape[0]
+
+                Mahalanobis_scores = get_mahalanobis_score(images, self.model, self.num_classes, self.sample_mean,
+                                                           self.precision,
+                                                           self.num_output, magnitude)
+
+                confidence_scores = regressor.predict_proba(Mahalanobis_scores)[:, 1]
+
+                for k in range(batch_size):
+                    f2.write("{}\n".format(-confidence_scores[k]))
+
+                count += batch_size
+                print("{:4}/{:4} images processed, {:.1f} seconds used.".format(count, m, time.time() - t0))
+                t0 = time.time()
+
+            f1.close()
+            f2.close()
+
+            results = metric(self.save_dir, self.stypes)
+            print_results(results, self.stypes)
+            fpr = results['mahalanobis']['FPR']
+            if fpr < best_fpr:
+                best_fpr = fpr
+                best_magnitude = magnitude
+                best_regressor = regressor
+
+        print('Best Logistic Regressor params:', best_regressor.coef_, best_regressor.intercept_)
+        print('Best magnitude', best_magnitude)
+
+        print('saving results...')
+
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+
+        np.save(os.path.join(self.save_dir, 'results'),
+                np.array([self.sample_mean, self.precision, best_regressor.coef_, best_regressor.intercept_,
+                          best_magnitude]))
+
+        return True
+
+
 if __name__ == "__main__":
     save_path = os.path.join("./output/mahalanobis_hyperparams/", args.in_dataset, args.name)
     Generate = GenerateMahalanobisHyperParam(args, save_path)
+
+    if Generate.train_logistic_regression():
+        print("FINISH")
