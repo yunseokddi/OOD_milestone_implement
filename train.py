@@ -162,10 +162,6 @@ def main():
                                 nesterov=True,
                                 weight_decay=args.weight_decay)
 
-    trainer = Trainer(train_loader, val_loader, model, criterion, optimizer, args)
-
-    trainer.train()
-
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
@@ -176,6 +172,10 @@ def main():
                   .format(args.resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
+
+    trainer = Trainer(train_loader, val_loader, model, criterion, optimizer, args)
+
+    trainer.train()
 
 
 if __name__ == "__main__":

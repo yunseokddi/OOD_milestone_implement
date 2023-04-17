@@ -1,7 +1,9 @@
 import torch
 import numpy as np
 
-class TinyImages(torch.utils.data.Dataset):
+from torch.utils.data import Dataset
+
+class TinyImages(Dataset):
 
     def __init__(self, transform=None, exclude_cifar=True):
 

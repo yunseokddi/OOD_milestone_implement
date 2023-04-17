@@ -8,17 +8,19 @@ import model.wideresnet as wn
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 
+from torch.utils.data import DataLoader
 from tensorboard_logger import configure
 from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHNDataLoader
 from data_loader.tiny_image_data_loader import TinyImages
 from model.oe_metric import OELoss
+from data_loader.random_image_data_loader import RandomImages
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
 parser.add_argument('--gpu', default='1,2,3', type=str, help='which gpu to use')
 
 parser.add_argument('--in-dataset', default="CIFAR-10", type=str, help='in-distribution dataset')
 parser.add_argument('--model-arch', default='densenet', type=str, help='model architecture')
-parser.add_argument('--auxiliary-dataset', default='80m_tiny_images',
+parser.add_argument('--auxiliary-dataset', default='300k_random_images',
                     choices=['80m_tiny_images', 'imagenet'], type=str, help='which auxiliary dataset to use')
 
 parser.add_argument('--beta', default=0.5, type=float, help='beta for out_loss')
@@ -140,11 +142,19 @@ def main():
         num_classes = 10
 
     if args.auxiliary_dataset == '80m_tiny_images':
-        ood_loader = torch.utils.data.DataLoader(
+        ood_loader = DataLoader(
             TinyImages(transform=transforms.Compose(
                 [transforms.ToTensor(), transforms.ToPILImage(), transforms.RandomCrop(32, padding=4),
                  transforms.RandomHorizontalFlip(), transforms.ToTensor()])),
             batch_size=args.ood_batch_size, shuffle=False, **kwargs)
+
+    elif args.auxiliary_dataset == '300k_random_images':
+        ood_loader = DataLoader(
+            RandomImages(transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.ToPILImage(), transforms.RandomCrop(32, padding=4),
+                 transforms.RandomHorizontalFlip(), transforms.ToTensor()])),
+            batch_size=args.ood_batch_size, shuffle=False, **kwargs
+        )
 
     else:
         assert False, "Check auxiliary_dataset's parameter"
@@ -177,6 +187,16 @@ def main():
                                 nesterov=True,
                                 weight_decay=args.weight_decay)
 
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            model.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
 
 if __name__ == "__main__":
