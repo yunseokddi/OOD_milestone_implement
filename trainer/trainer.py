@@ -15,6 +15,9 @@ class Trainer(object):
         self.optimizer = optimizer
         self.args = args
         self.epoch = self.args.epochs
+        self.batch_time = AverageMeter()
+        self.nat_losses = AverageMeter()
+        self.nat_top1 = AverageMeter()
 
     def adjust_learning_rate(self, lr_schedule=[50, 75, 90]):
         """Sets the learning rate to the initial LR decayed by 10 after 40 and 80 epochs"""
@@ -45,9 +48,6 @@ class Trainer(object):
 
     def _train_epoch(self, epoch):
         tq_train = tqdm(self.train_loader, total=len(self.train_loader), desc='Train epoch : {}'.format(epoch))
-        batch_time = AverageMeter()
-        nat_losses = AverageMeter()
-        nat_top1 = AverageMeter()
 
         self.model.train()
 
@@ -60,8 +60,8 @@ class Trainer(object):
             nat_output = self.model(input)
             nat_loss = self.criterion(nat_output, target)
             nat_prec1 = self.accuracy(nat_output.data, target, topk=(1,))[0]
-            nat_losses.update(nat_loss.data, input.size(0))
-            nat_top1.update(nat_prec1, input.size(0))
+            self.nat_losses.update(nat_loss.data, input.size(0))
+            self.nat_top1.update(nat_prec1, input.size(0))
 
             loss = nat_loss
 
@@ -69,21 +69,21 @@ class Trainer(object):
             loss.backward()
             self.optimizer.step()
 
-            batch_time.update(time.time() - end)
+            self.batch_time.update(time.time() - end)
             end = time.time()
 
             errors = {
                 'Epoch': epoch,
-                'Batch time': batch_time.avg,
-                'Train loss': nat_losses.avg.item(),
-                'Prec': nat_top1.avg.item()
+                'Batch time': self.batch_time.avg,
+                'Train loss': self.nat_losses.avg.item(),
+                'Prec': self.nat_top1.avg.item()
             }
 
             tq_train.set_postfix(errors)
 
         if self.args.tensorboard:
-            log_value('nat_train_loss', nat_losses.avg, self.epoch)
-            log_value('nat_train_acc', nat_top1.avg, epoch)
+            log_value('nat_train_loss', self.nat_losses.avg, self.epoch)
+            log_value('nat_train_acc', self.nat_top1.avg, epoch)
 
     def _val_epoch(self, epoch):
         tq_val = tqdm(self.val_loader, total=len(self.val_loader),desc='Val epoch : {}'.format(epoch))

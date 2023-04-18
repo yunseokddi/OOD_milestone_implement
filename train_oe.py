@@ -14,6 +14,7 @@ from data_loader.data_loader import CIFAR10DataLoader, CIFAR100DataLoader, SVHND
 from data_loader.tiny_image_data_loader import TinyImages
 from model.oe_metric import OELoss
 from data_loader.random_image_data_loader import RandomImages
+from trainer.oe_trainer import OETrainer
 
 parser = argparse.ArgumentParser(description='PyTorch DenseNet Training')
 parser.add_argument('--gpu', default='1,2,3', type=str, help='which gpu to use')
@@ -141,6 +142,9 @@ def main():
         lr_schedule = [10, 15, 18]
         num_classes = 10
 
+    else:
+        assert False, "Check in_dataset's parameter"
+
     if args.auxiliary_dataset == '80m_tiny_images':
         ood_loader = DataLoader(
             TinyImages(transform=transforms.Compose(
@@ -198,6 +202,8 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
+    trainer = OETrainer(train_loader, ood_loader, val_loader, model, criterion, ood_criterion, optimizer, args)
+    trainer.train()
 
 if __name__ == "__main__":
     main()

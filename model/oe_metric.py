@@ -7,4 +7,4 @@ class OELoss(nn.Module):
         super(OELoss, self).__init__()
 
     def forward(self, x):
-        return -(x.maen(1) - torch.logsumexp(x, dim=1)).mean()
+        return -(x.mean(1) - torch.logsumexp(x, dim=1)).mean()
