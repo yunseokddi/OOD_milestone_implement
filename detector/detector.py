@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from tqdm import tqdm
-from model.metric import get_msp_score, get_odin_score, get_Mahanobis_score
+from model.metric import get_msp_score, get_odin_score, get_Mahanobis_score, get_energy_score
 from data_loader.in_data_loader import InDataLoader
 from data_loader.out_data_loader import OutDataLoader
 from torch.autograd import Variable
@@ -100,12 +100,11 @@ class Detector(object):
             self.model.eval()
 
         if self.method == "mahalanobis":
-            temp_x = torch.rand(2,3,32,32)
+            temp_x = torch.rand(2, 3, 32, 32)
             temp_x = Variable(temp_x).cuda()
             temp_list = self.model.feature_list(temp_x)[1]
             num_output = len(temp_list)
             self.method_args['num_output'] = num_output
-
 
     def detect(self):
         if not self.mode_args['out_dist_only']:
@@ -191,23 +190,26 @@ class Detector(object):
 
                 count += curr_batch_size
 
-                errors = {'Dataset' :out_dataset,
-                    'Count': count,
-                    'Time': time.time() - t0
-                }
+                errors = {'Dataset': out_dataset,
+                          'Count': count,
+                          'Time': time.time() - t0
+                          }
 
                 tq_out_distribution.set_postfix(errors)
                 t0 = time.time()
 
-    def get_score(self, inputs, raw_score=False):
+    def get_score(self, inputs, raw_score=False, T=0.1):
         if self.method == "msp":
             scores = get_msp_score(inputs, self.model)
 
         elif self.method == "odin":
-            scores = get_odin_score(inputs, self.model, self.method_args, self.in_dataset,  self.args.model_arch)
+            scores = get_odin_score(inputs, self.model, self.method_args, self.in_dataset, self.args.model_arch)
 
         elif self.method == "mahalanobis":
             scores = get_Mahanobis_score(inputs, self.model, self.method_args)
+
+        elif self.method == "energy":
+            scores = get_energy_score(inputs, self.model, T)
 
 
         else:

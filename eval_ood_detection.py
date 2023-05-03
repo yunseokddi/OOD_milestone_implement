@@ -28,7 +28,7 @@ parser.add_argument('--adv-corrupt', help='comp. OOD', action='store_true')
 parser.add_argument('--in-dist-only', help='only evaluate in-distribution', action='store_true')
 parser.add_argument('--out-dist-only', help='only evaluate out-distribution', action='store_true')
 
-parser.add_argument('--method', default='mahalanobis', type=str, help='scoring function')
+parser.add_argument('--method', default='energy', type=str, help='scoring function')
 parser.add_argument('--cal-metric', help='calculate metric directly', action='store_true')
 
 parser.add_argument('--epsilon', default=8.0, type=float, help='epsilon')
@@ -70,7 +70,9 @@ if __name__ == "__main__":
     mode_args['in_dist_only'] = args.in_dist_only
     mode_args['out_dist_only'] = args.out_dist_only
 
-    out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
+    # out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
+
+    out_datasets = ['LSUN']
 
     if args.method == "msp":
         detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
@@ -95,6 +97,10 @@ if __name__ == "__main__":
         method_args['magnitude'] = magnitude
         method_args['regressor'] = regressor
 
+        detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
+        detector.detect()
+
+    elif args.method == "energy":
         detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
         detector.detect()
 

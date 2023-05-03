@@ -82,6 +82,17 @@ def get_Mahanobis_score(inputs , model, method_args):
     return scores
 
 
+def get_energy_score(inputs, model, T):
+    with torch.no_grad():
+        outputs = model(inputs)
+        outputs = F.softmax(outputs, dim=1)
+
+    scores = T * torch.logsumexp(outputs/ T, dim=1)
+    scores = scores.cpu().numpy()
+
+    return scores
+
+
 
 # metric for OOD
 def cal_metric(known, novel, method):
