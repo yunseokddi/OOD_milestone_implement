@@ -5,6 +5,8 @@ This is Pytorch implementation of the OOD experiments with [pytorch-template](ht
 - [MSP] A Baseline for Detecting Missclassified and Out-of-Distribution Examples in Neural Networks | **[ICLR2017]** [[paper]](https://arxiv.org/pdf/1610.02136.pdf)
 - [ODIN] Enhancing The Reliability of Out-of-Distribution Image Detection in Neural Networks | **[ICLR2018]** [[paper]](https://arxiv.org/pdf/1706.02690.pdf)
 - [Mahalanobis] A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks | **[NIPS2018]** [[paper]](https://arxiv.org/abs/1807.03888)
+- [OE] Deep Anomaly Detection with Outlier Exposure | **[ICLR2019]** [[paper]](https://arxiv.org/abs/1812.04606)
+- [Energy] Energy-based Out-of-distribution Detection | **[NIPS2020]** [[paper]](https://arxiv.org/abs/2010.03759)
 
 ## Installation & requirement
 
