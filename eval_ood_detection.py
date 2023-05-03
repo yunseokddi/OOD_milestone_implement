@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # out_datasets = ['LSUN', 'LSUN_resize', 'iSUN', 'dtd', 'SVHN']
 
-    out_datasets = ['LSUN']
+    out_datasets = ['SVHN']
 
     if args.method == "msp":
         detector = Detector(args, out_datasets, method_args, adv_args, mode_args)
